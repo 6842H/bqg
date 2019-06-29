@@ -11,9 +11,7 @@ from re import compile, findall
 from random import choice
 from traceback import format_exc
 from DBPool import DBPool
-from MTh import MThread
 from threading import Thread
-from time import sleep, time
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -117,7 +115,7 @@ def get_book_msg(book_id):
         L = len(chapters_link)
         if L == len(chapters_title):
             d = [
-                [findall(pattern_for_chapter_link_id, link)[0], book_id, title.split('章 ', 1)[-1], 0, '']
+                [findall(pattern_for_chapter_link_id, link)[0], book_id, title.split(' ', 1)[-1], 0, '']
                 for link, title in zip(chapters_link, chapters_title)
                 ]
             DBPool.insert_item(table_name='chapters', cols_tuple=chapters_cols, values_tuple=d)
@@ -153,11 +151,12 @@ def download_chapter(book_id=6513, chapter_id=1443774):
     if res.status_code == 200:
         html = etree.HTML(res.content)
         content = html.xpath('string(//div[@id="content"])')
-        print(content)
+        # print(content)
         content = content.strip().replace("'", "''")
         sql = "update chapters set state=1, content='%s' where chapter_id=%s " % (content, chapter_id)
         try:
             DBPool.exe_sql(sql)
+            print('book_id: ', book_id, 'chapter_id', chapter_id, '已保存')
         except Exception as e:
             print('book_id: ', book_id, 'chapter_id', chapter_id, '--------------------content保存失败')
             print(format_exc(), e)
@@ -192,6 +191,30 @@ def download_book(book_id=6513):
 # download_book()
 
 
+def download_book_cell(book_id, chapters):
+    for chapter in chapters:
+        try:
+            download_chapter(book_id, chapter[0])
+        except Exception as e:
+            print(format_exc(), e)
+
+
+# 下载整本书
+def download_book_in_thread(book_id=6513, thread_n=5):
+    sql = "select chapter_id from chapters where book_id=%d and state=0" % book_id
+    res = DBPool.exe_sql(sql)     # 二维tuple
+    if res:
+        L = len(res)
+        step = ceil(L / thread_n)
+        threads = []
+        for i in range(thread_n):
+            threads.append(Thread(name=str(i), target=download_book_cell, args=(book_id, res[i * step: (i + 1) * step])))
+        for t in threads:
+            t.start()
+
+# download_book()
+
+
 # 下载给定的任务包
 def download_chapter_cell(chapter_book):
     if chapter_book:
@@ -217,7 +240,7 @@ def download_chapters_in_thread(chapters_n=100, thread_n=5):
 
 # scan_books_in_thread(1, 1000, 10)
 # download_chapters_in_thread(10000, 10)
-
+# download_book_in_thread(24, 10)
 
 
 
